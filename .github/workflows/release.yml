@@ -22,7 +22,10 @@ jobs:
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
+      EXPO_NO_TELEMETRY: 1
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
@@ -42,6 +45,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
 
       - name: Install dependencies
         run: npm ci
@@ -52,8 +56,26 @@ jobs:
       - name: Build release APK
         working-directory: android
         run: |
+          set -euo pipefail
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon
+          for attempt in 1 2; do
+            echo "Gradle build attempt ${attempt}"
+            if ./gradlew :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee "../gradle-build-attempt-${attempt}.log"; then
+              exit 0
+            fi
+            if [ "$attempt" = "2" ]; then
+              exit 1
+            fi
+            sleep 20
+          done
+
+      - name: Upload Gradle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sub2api-mobile-gradle-logs
+          path: gradle-build-attempt-*.log
+          if-no-files-found: ignore
 
       - name: Collect APK
         run: |
