@@ -7,7 +7,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { LineTrendChart } from '@/src/components/line-trend-chart';
 import { getDashboardSnapshot, getUsageStats, getUser, listUserApiKeys, updateUserBalance, updateUserStatus } from '@/src/services/admin';
+import { adminConfigState } from '@/src/store/admin-config';
+import { listBalanceHistory, recordBalanceOperation, type BalanceHistoryRecord } from '@/src/store/balance-history';
 import type { AdminApiKey, BalanceOperation } from '@/src/types/admin';
+
+const { useSnapshot } = require('valtio/react');
 
 const colors = {
   page: '#f4efe4',
@@ -92,7 +96,48 @@ function formatQuotaUsage(quotaUsed?: number | null, quota?: number | null) {
     return '∞';
   }
 
-  return `${used}`;
+  return `${formatTokenValue(used)} / ${formatTokenValue(limit)}`;
+}
+
+function getQuotaPercent(item: AdminApiKey) {
+  const used = Number(item.quota_used ?? 0);
+  const limit = Number(item.quota ?? 0);
+
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) {
+    return null;
+  }
+
+  return Math.min(Math.max((used / limit) * 100, 0), 100);
+}
+
+function formatPercent(value: number | null) {
+  if (value === null) return '无限制';
+  return `${value.toFixed(0)}%`;
+}
+
+function formatCompactUsage(value?: number | null) {
+  return formatTokenValue(value ?? 0);
+}
+
+function isExpired(value?: string | null) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time < Date.now();
+}
+
+function getOperationLabel(operation: BalanceOperation) {
+  if (operation === 'add') return '充值';
+  if (operation === 'subtract') return '扣减';
+  return '设为';
+}
+
+function getBalanceDeltaText(record: BalanceHistoryRecord) {
+  if (record.operation === 'set') {
+    return `设为 ${formatMoney(record.amount)}`;
+  }
+
+  const sign = record.operation === 'add' ? '+' : '-';
+  return `${sign}${formatMoney(record.amount)}`;
 }
 
 function formatTime(value?: string | null) {
@@ -196,6 +241,9 @@ function CopyInlineButton({ copied, onPress }: { copied: boolean; onPress: () =>
 }
 
 function KeyItem({ item, copied, onCopy }: { item: AdminApiKey; copied: boolean; onCopy: () => void }) {
+  const quotaPercent = getQuotaPercent(item);
+  const expired = isExpired(item.expires_at);
+
   return (
     <View
       style={{
@@ -220,6 +268,25 @@ function KeyItem({ item, copied, onCopy }: { item: AdminApiKey; copied: boolean;
 
       <Text style={{ marginTop: 10, fontSize: 12, lineHeight: 18, color: colors.text }}>{item.key || '--'}</Text>
 
+      <View style={{ marginTop: 12 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+          <Text style={{ fontSize: 11, color: colors.subtext }}>额度使用</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: quotaPercent !== null && quotaPercent >= 90 ? colors.errorText : colors.text }}>
+            {formatPercent(quotaPercent)}
+          </Text>
+        </View>
+        <View style={{ marginTop: 8, height: 8, overflow: 'hidden', borderRadius: 999, backgroundColor: '#ded5c6' }}>
+          <View
+            style={{
+              width: `${quotaPercent ?? 0}%`,
+              height: '100%',
+              borderRadius: 999,
+              backgroundColor: quotaPercent !== null && quotaPercent >= 90 ? colors.errorText : colors.primary,
+            }}
+          />
+        </View>
+      </View>
+
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginTop: 12 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 11, color: colors.subtext }}>已用额度</Text>
@@ -230,6 +297,49 @@ function KeyItem({ item, copied, onCopy }: { item: AdminApiKey; copied: boolean;
           <Text style={{ marginTop: 4, fontSize: 13, color: colors.subtext }}>{formatTime(item.last_used_at || item.updated_at || item.created_at)}</Text>
         </View>
       </View>
+
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+        <MetricCard label="5H" value={formatCompactUsage(item.usage_5h)} />
+        <MetricCard label="1D" value={formatCompactUsage(item.usage_1d)} />
+        <MetricCard label="7D" value={formatCompactUsage(item.usage_7d)} />
+      </View>
+
+      <View style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+        <Text style={{ flex: 1, fontSize: 11, color: colors.subtext }}>创建 {formatTime(item.created_at)}</Text>
+        <Text style={{ flex: 1, textAlign: 'right', fontSize: 11, color: expired ? colors.errorText : colors.subtext }}>
+          过期 {item.expires_at ? formatTime(item.expires_at) : '永不过期'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function BalanceHistoryItem({ record }: { record: BalanceHistoryRecord }) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.muted,
+        borderRadius: 14,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        marginBottom: 10,
+      }}
+    >
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>{getOperationLabel(record.operation)}</Text>
+          <Text style={{ marginTop: 4, fontSize: 12, color: colors.subtext }}>{formatTime(record.createdAt)}</Text>
+        </View>
+        <Text style={{ fontSize: 16, fontWeight: '900', color: record.operation === 'subtract' ? colors.errorText : colors.primary }}>
+          {getBalanceDeltaText(record)}
+        </Text>
+      </View>
+
+      <Text style={{ marginTop: 10, fontSize: 12, color: colors.subtext }}>
+        余额 {formatMoney(record.previousBalance)} → {formatMoney(record.nextBalance)}
+      </Text>
+      {record.notes ? <Text style={{ marginTop: 6, fontSize: 12, lineHeight: 18, color: colors.text }}>备注：{record.notes}</Text> : null}
     </View>
   );
 }
@@ -238,6 +348,7 @@ export default function UserDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const queryClient = useQueryClient();
+  const config = useSnapshot(adminConfigState);
 
   const [operation, setOperation] = useState<BalanceOperation>('add');
   const [amount, setAmount] = useState('10');
@@ -253,6 +364,17 @@ export default function UserDetailScreen() {
     queryKey: ['user', userId],
     queryFn: () => getUser(userId),
     enabled: Number.isFinite(userId),
+  });
+
+  const balanceHistoryQuery = useQuery({
+    queryKey: ['balance-history', config.activeAccountId, config.baseUrl, userId],
+    queryFn: () =>
+      listBalanceHistory({
+        accountId: config.activeAccountId,
+        baseUrl: config.baseUrl,
+        userId,
+      }),
+    enabled: Number.isFinite(userId) && Boolean(config.baseUrl),
   });
 
   const apiKeysQuery = useQuery({
@@ -281,8 +403,8 @@ export default function UserDetailScreen() {
       }),
     enabled: Number.isFinite(userId),
   });
-;
-;
+
+  const user = userQuery.data;
 
   const balanceMutation = useMutation({
     mutationFn: (payload: { amount: number; notes?: string; operation: BalanceOperation }) =>
@@ -291,12 +413,24 @@ export default function UserDetailScreen() {
         notes: payload.notes,
         operation: payload.operation,
       }),
-    onSuccess: () => {
+    onSuccess: async (updatedUser, payload) => {
+      await recordBalanceOperation({
+        accountId: config.activeAccountId,
+        baseUrl: config.baseUrl,
+        userId,
+        userEmail: user?.email ?? updatedUser.email,
+        operation: payload.operation,
+        amount: payload.amount,
+        previousBalance: user?.balance ?? null,
+        nextBalance: updatedUser.balance ?? null,
+        notes: payload.notes,
+      });
       setFormError(null);
       setAmount('10');
       setNotes('');
       queryClient.invalidateQueries({ queryKey: ['user', userId] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['balance-history', config.activeAccountId, config.baseUrl, userId] });
     },
     onError: (error) => setFormError(getErrorMessage(error)),
   });
@@ -311,8 +445,8 @@ export default function UserDetailScreen() {
     onError: (error) => setStatusError(getErrorMessage(error)),
   });
 
-  const user = userQuery.data;
   const apiKeys = apiKeysQuery.data?.items ?? [];
+  const balanceHistory = balanceHistoryQuery.data ?? [];
 
   const filteredApiKeys = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
@@ -633,6 +767,26 @@ export default function UserDetailScreen() {
             <Pressable onPress={submitBalance} style={{ backgroundColor: colors.dark, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontWeight: '700' }}>{balanceMutation.isPending ? '提交中...' : '确认提交'}</Text>
             </Pressable>
+          </Section>
+
+          <Section title="本机余额记录">
+            <Text style={{ marginBottom: 10, fontSize: 12, lineHeight: 18, color: colors.subtext }}>
+              展示当前设备通过本 App 提交的最近余额操作；服务端全量流水需要后端提供记录接口。
+            </Text>
+
+            {balanceHistoryQuery.isLoading ? <Text style={{ color: colors.subtext }}>正在加载余额记录...</Text> : null}
+
+            {!balanceHistoryQuery.isLoading && balanceHistory.length > 0 ? (
+              <View>
+                {balanceHistory.map((record) => (
+                  <BalanceHistoryItem key={record.id} record={record} />
+                ))}
+              </View>
+            ) : null}
+
+            {!balanceHistoryQuery.isLoading && balanceHistory.length === 0 ? (
+              <Text style={{ color: colors.subtext }}>暂无本机余额操作记录。</Text>
+            ) : null}
           </Section>
         </ScrollView>
       </SafeAreaView>
