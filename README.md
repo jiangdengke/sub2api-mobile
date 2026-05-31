@@ -84,8 +84,7 @@ GitHub Release build:
 
 - Workflow: `.github/workflows/release.yml`
 - Trigger: push a tag like `v1.0.0`
-- Output: uploads Android APK and iOS IPA assets to the matching GitHub Release
-- Requirement: repository secret `EXPO_TOKEN`
+- Output: uploads an Android APK asset to the matching GitHub Release
 
 ## Project Structure
 

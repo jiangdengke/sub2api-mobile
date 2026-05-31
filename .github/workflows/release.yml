@@ -1,4 +1,4 @@
-name: Release Apps
+name: Release Android APK
 
 on:
   push:
@@ -19,18 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build ${{ matrix.platform }}
+  build-android:
+    name: Build Android APK
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - android
-          - ios
     env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      EAS_PROFILE: release
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
@@ -45,38 +37,45 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Setup Expo and EAS
-        uses: expo/expo-github-action@v8
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
+          distribution: temurin
+          java-version: 17
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run EAS build
-        run: eas build --non-interactive --wait --json --profile "$EAS_PROFILE" --platform "${{ matrix.platform }}" > "eas-build-${{ matrix.platform }}.json"
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install --clean
 
-      - name: Extract artifact metadata
-        id: artifact
-        run: node .github/scripts/eas-artifact-metadata.js "eas-build-${{ matrix.platform }}.json" "${{ matrix.platform }}" "$EAS_PROFILE"
+      - name: Build release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
 
-      - name: Prepare artifact directory
-        run: mkdir -p dist
-
-      - name: Download build artifact
-        run: curl --retry 5 --retry-delay 5 -LfsS "${{ steps.artifact.outputs.download_url }}" -o "dist/${{ steps.artifact.outputs.filename }}"
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          apk_path="$(find android/app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
+          if [ -z "$apk_path" ]; then
+            echo "No release APK found."
+            exit 1
+          fi
+          cp "$apk_path" "dist/sub2api-mobile-${RELEASE_TAG}-android.apk"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.artifact_name }}
-          path: dist/${{ steps.artifact.outputs.filename }}
+          name: sub2api-mobile-android-apk
+          path: dist/*.apk
           if-no-files-found: error
 
   release:
     name: Publish GitHub Release
-    needs: build
+    needs: build-android
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -85,7 +84,7 @@ jobs:
       - name: Download workflow artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: sub2api-mobile-*
+          pattern: sub2api-mobile-android-apk
           path: release-assets
           merge-multiple: true
 

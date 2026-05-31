@@ -202,7 +202,7 @@ eas build --non-interactive --profile <profile> --platform <platform>
 
 ## Tag 自动发布
 
-仓库还提供发布工作流：`.github/workflows/release.yml`
+仓库还提供 Android APK 发布工作流：`.github/workflows/release.yml`
 
 触发方式：
 
@@ -211,14 +211,15 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-工作流会使用 `release` profile 同时构建：
+工作流会在 GitHub Actions 中执行：
 
-- Android APK
-- iOS IPA
+- `npm ci`
+- `npx expo prebuild --platform android --no-install --clean`
+- `./gradlew :app:assembleRelease --no-daemon`
 
-构建完成后会创建或更新同名 GitHub Release，并上传两个平台的安装包。
+构建完成后会创建或更新同名 GitHub Release，并上传 Android APK。
 
-也可以在 GitHub Actions 页面手动触发 `Release Apps`，指定已有 tag 重新发布。
+也可以在 GitHub Actions 页面手动触发 `Release Android APK`，指定已有 tag 重新发布。
 
 ## 正式包
 
