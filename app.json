@@ -3,7 +3,7 @@
     "name": "sub2api-mobile",
     "slug": "sub2api-mobile",
     "owner": "ckken",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./icons/ios/AppIcon.appiconset/icon-1024.png",
     "userInterfaceStyle": "light",

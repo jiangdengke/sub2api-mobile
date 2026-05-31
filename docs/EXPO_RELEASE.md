@@ -197,7 +197,7 @@ npx eas-cli@latest update --branch preview --message "align dev-client and user 
 
 ```bash
 npm ci
-npx eas build --non-interactive --profile <profile> --platform <platform>
+eas build --non-interactive --profile <profile> --platform <platform>
 ```
 
 ## Tag 自动发布

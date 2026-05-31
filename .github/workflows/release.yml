@@ -55,7 +55,7 @@ jobs:
         run: npm ci
 
       - name: Run EAS build
-        run: npx eas build --non-interactive --wait --json --profile "$EAS_PROFILE" --platform "${{ matrix.platform }}" > "eas-build-${{ matrix.platform }}.json"
+        run: eas build --non-interactive --wait --json --profile "$EAS_PROFILE" --platform "${{ matrix.platform }}" > "eas-build-${{ matrix.platform }}.json"
 
       - name: Extract artifact metadata
         id: artifact
