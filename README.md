@@ -80,6 +80,13 @@ GitHub Actions Android build (downloadable):
 - Requirement: repository secret `EXPO_TOKEN`
 - Download: after completion, open the run **Summary** and use the `ANDROID download` link.
 
+GitHub Release build:
+
+- Workflow: `.github/workflows/release.yml`
+- Trigger: push a tag like `v1.0.0`
+- Output: uploads Android APK and iOS IPA assets to the matching GitHub Release
+- Requirement: repository secret `EXPO_TOKEN`
+
 ## Project Structure
 
 ```txt

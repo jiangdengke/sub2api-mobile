@@ -200,6 +200,26 @@ npm ci
 npx eas build --non-interactive --profile <profile> --platform <platform>
 ```
 
+## Tag 自动发布
+
+仓库还提供发布工作流：`.github/workflows/release.yml`
+
+触发方式：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+工作流会使用 `release` profile 同时构建：
+
+- Android APK
+- iOS IPA
+
+构建完成后会创建或更新同名 GitHub Release，并上传两个平台的安装包。
+
+也可以在 GitHub Actions 页面手动触发 `Release Apps`，指定已有 tag 重新发布。
+
 ## 正式包
 
 ```bash
